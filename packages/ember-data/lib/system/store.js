@@ -815,16 +815,9 @@ Store = Service.extend({
     var typeClass = this.modelFor(typeName);
     var id = coerceId(inputId);
     var idToRecord = this.typeMapFor(typeClass).idToRecord;
-    var record = idToRecord[id];
 
-    if (!record || !idToRecord[id]) {
-      record = this.buildInternalModel(typeClass, id);
-    }
-
-    return record;
+    return idToRecord[id] || this.buildInternalModel(typeClass, id);
   },
-
-
 
   /**
     @method findMany
@@ -835,7 +828,6 @@ Store = Service.extend({
   findMany: function(internalModels) {
     return Promise.all(internalModels.map((internalModel) => this._findByInternalModel(internalModel)));
   },
-
 
   /**
     If a relationship was originally populated by the adapter as a link
@@ -1444,8 +1436,7 @@ Store = Service.extend({
     @param {Object} data
   */
   _load: function(data) {
-    var id = coerceId(data.id);
-    var internalModel = this._internalModelForId(data.type, id);
+    var internalModel = this._internalModelForId(data.type, data.id);
 
     internalModel.setupData(data);
 
@@ -1481,7 +1472,7 @@ Store = Service.extend({
       //Cache the class as a model
       registry.register('model:' + normalizedModelName, DS.Model.extend(mixin));
     }
-    var factory = this.modelFactoryFor(normalizedModelName);
+    var factory = this.container.lookupFactory('model:' + normalizedModelName);
     if (factory) {
       factory.__isMixin = true;
       factory.__mixin = mixin;
@@ -1672,13 +1663,22 @@ Store = Service.extend({
       updated.
   */
   push: function(data) {
-    if (data.included) {
-      data.included.forEach((recordData) => this._pushInternalModel(recordData));
+    var included = data.included;
+    if (included) {
+      var includedLength = included.length;
+      for (var i = 0; i < includedLength; i++) {
+        this._pushInternalModel(included[i]);
+      }
     }
 
     if (Ember.typeOf(data.data) === 'array') {
-      var internalModels = data.data.map((recordData) => this._pushInternalModel(recordData));
-      return internalModels.map((internalModel) => internalModel.getRecord());
+      var dataLength = data.data;
+      var mappedData = [];
+      mappedData.length = data.data.length;
+      for (var i = 0; i < dataLength; i++) {
+        mappedData[i] = this._pushInternalModel(data.data[i]).getRecord();
+      }
+      return mappedData;
     }
 
     var internalModel = this._pushInternalModel(data.data || data);
